@@ -12,8 +12,19 @@ export interface NeedStrategyMapping {
 
 export const NEED_STRATEGIES: NeedStrategyMapping[] = [
   {
+    needKeyword: "battery",
+    matchedKeywords: ["battery", "battery pack", "cells", "bms", "energy storage", "lithium", "solar"],
+    recommendedAskType: "in_kind",
+    requiredEvidenceKeywords: ["battery", "cell", "energy storage", "pack assembly", "bms", "lithium", "power"],
+    rejectionTriggers: ["retail", "consumer goods", "alkaline", "phone charger", "consumer power bank"],
+    defaultSpecificRequest: (team, comp) =>
+      `High-discharge lithium cell allocation and battery management system (BMS) testing support for the vehicle powertrain.`,
+    defaultReason: (team, comp) =>
+      `${comp} specializes in high-density battery cell fabrication and pack safety testing, vital for vehicle endurance.`,
+  },
+  {
     needKeyword: "pcb",
-    matchedKeywords: ["pcb", "circuit board", "fabrication", "smt", "pcba", "prototyping"],
+    matchedKeywords: ["pcb", "pcb fabrication", "circuit board", "smt", "pcba", "board prototyping"],
     recommendedAskType: "in_kind",
     requiredEvidenceKeywords: ["fabrication", "manufacturing", "pcb", "assembly", "prototyping", "board", "smt", "ems"],
     rejectionTriggers: ["retail", "consumer e-commerce", "phone repair", "gadget store", "retailer", "accessory"],
@@ -32,17 +43,6 @@ export const NEED_STRATEGIES: NeedStrategyMapping[] = [
       `Evaluation sensor units or discounted access to high-precision IMU/avionics components for integration into ${team}'s flight stack.`,
     defaultReason: (team, comp) =>
       `${comp} supplies industrial/aerospace grade sensor solutions, eliminating single-point sensor drift in competitive flight maneuvers.`,
-  },
-  {
-    needKeyword: "battery",
-    matchedKeywords: ["battery", "battery pack", "cells", "bms", "energy storage", "lithium", "solar"],
-    recommendedAskType: "in_kind",
-    requiredEvidenceKeywords: ["battery", "cell", "energy storage", "pack assembly", "bms", "lithium", "power"],
-    rejectionTriggers: ["retail", "consumer goods", "alkaline", "phone charger", "consumer power bank"],
-    defaultSpecificRequest: (team, comp) =>
-      `High-discharge lithium cell allocation and battery management system (BMS) testing support for the vehicle powertrain.`,
-    defaultReason: (team, comp) =>
-      `${comp} specializes in high-density battery cell fabrication and pack safety testing, vital for vehicle endurance.`,
   },
   {
     needKeyword: "software",
