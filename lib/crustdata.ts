@@ -128,19 +128,22 @@ export async function searchCrustdataCompanies(
     throw new Error("CRUSTDATA_API_KEY is not configured in server environment.");
   }
 
+  // Extract a clean core keyword from query for description search
+  const cleanKeyword = query.split(/\s+/)[0] || "manufacturing";
+
   const payload = {
     filters: {
       op: "and",
       conditions: [
         {
-          field: "keyword",
+          field: "basic_info.description",
           type: "(.)",
-          value: query,
+          value: cleanKeyword,
         },
         ...(country && country !== "All"
           ? [
               {
-                field: "headquarters.country",
+                field: "locations.country",
                 type: "=",
                 value: country,
               },
@@ -153,24 +156,22 @@ export async function searchCrustdataCompanies(
 
   const response = await callCrustdataApi("/company/search", payload, key);
 
-  // Parse results from array or response wrapper
+  // Parse results from Crustdata /company/search envelope (companies array)
   const rawList: any[] = Array.isArray(response)
     ? response
-    : response?.results || response?.data || response?.companies || [];
+    : response?.companies || response?.results || response?.data || [];
 
-  return rawList.map((item: CrustdataCompanyRaw, idx: number): NormalizedCompany => {
-    const name = item.company_name || item.name || `Company-${idx + 1}`;
-    const domain = (item.domain || item.website || `${name.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`)
-      .replace(/^https?:\/\//, "")
-      .replace(/\/$/, "");
-    const description = item.description || "Technology / Manufacturing enterprise.";
-    const industry = item.taxonomy?.industry || item.industry || "Hardware & Manufacturing";
-    const loc = item.headquarters
-      ? `${item.headquarters.city ? item.headquarters.city + ", " : ""}${item.headquarters.country || country}`
-      : country;
+  return rawList.map((item: any, idx: number): NormalizedCompany => {
+    const basicInfo = item.basic_info || item;
+    const name = basicInfo.name || basicInfo.company_name || `Company-${idx + 1}`;
+    const rawDomain = basicInfo.primary_domain || basicInfo.website || basicInfo.domain || `${name.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`;
+    const domain = rawDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    const description = basicInfo.description || item.description || "Technology / Manufacturing enterprise.";
+    const industry = item.taxonomy?.professional_network_industry || item.industry || "Hardware & Manufacturing";
+    const loc = country;
 
     return {
-      id: item.id || `crust_${name.toLowerCase().replace(/[^a-z0-9]/g, "_")}_${idx}`,
+      id: String(item.crustdata_company_id || basicInfo.crustdata_company_id || item.id || idx),
       name,
       domain,
       description,

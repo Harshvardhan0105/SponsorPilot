@@ -222,7 +222,7 @@ export default function Home() {
               <Cpu className="w-3.5 h-3.5 text-blue-400" />
               <span className="text-slate-400">Reasoning:</span>
               <span className={health?.llm_configured ? "text-blue-400 font-medium" : "text-slate-300 font-medium"}>
-                {health?.llm_configured ? "Gemini 1.5 Active" : "Heuristic Guard"}
+                {health?.llm_configured ? "Gemini 3.5 Active" : "Heuristic Guard"}
               </span>
             </div>
 
