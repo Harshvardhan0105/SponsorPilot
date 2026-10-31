@@ -419,13 +419,25 @@ BODY:
 
       if (llmDraft && llmDraft.includes("BODY:")) {
         const parts = llmDraft.split("BODY:");
-        emailSubject = parts[0].replace(/SUBJECT:/i, "").trim();
-        emailBody = parts[1].trim();
-        usedLlmReasoning = true;
+        const candidateSubject = parts[0].replace(/SUBJECT:/i, "").trim();
+        const candidateBody = parts[1].trim();
+
+        // Validate BOTH subject and body against unapproved achievements, reaches, and awards
+        const subjectCheck = containsUnapprovedAchievement(candidateSubject, approvedFacts);
+        const bodyCheck = containsUnapprovedAchievement(candidateBody, approvedFacts);
+
+        if (!subjectCheck.hasViolation && !bodyCheck.hasViolation) {
+          emailSubject = candidateSubject;
+          emailBody = candidateBody;
+          usedLlmReasoning = true;
+        } else {
+          // Reject LLM text completely if unapproved claims are detected
+          emailBody = "";
+        }
       }
     }
 
-    // Deterministic fallback draft if LLM draft was not generated
+    // Conservative fallback draft using ONLY approved facts
     if (!emailBody) {
       const recipientGreeting = contactPerson ? `Hi ${contactPerson.name.split(" ")[0]},` : `Hello ${company.name} Team,`;
       const approvedFactSnippet = approvedFacts.length > 0
@@ -448,12 +460,21 @@ ${request.team_name}
 [STATUS: DRAFT ONLY - NOT SENT]`;
     }
 
-    // FINAL OUTPUT VALIDATION GUARD:
-    // Strip any unapproved competition win/award claims from draft
-    const draftWinCheck = containsUnapprovedAchievement(emailBody, approvedFacts);
-    if (draftWinCheck.hasViolation && draftWinCheck.detectedPhrase) {
-      const regex = new RegExp(`\\b${draftWinCheck.detectedPhrase}\\b`, "gi");
-      emailBody = emailBody.replace(regex, "[unverified claim excluded]");
+    // Final safety check on fallback: ensure zero unsupported claims survive
+    if (containsUnapprovedAchievement(emailSubject, approvedFacts).hasViolation) {
+      emailSubject = `Student Partnership Inquiry: ${request.team_name}`;
+    }
+    if (containsUnapprovedAchievement(emailBody, approvedFacts).hasViolation) {
+      emailBody = `Hello ${company.name} Team,
+
+We are reaching out from ${request.team_name}. ${approvedFacts.length > 0 ? approvedFacts[0].text : ""}
+
+We would appreciate the opportunity to discuss student partnership support:
+• Request: ${qual.ask.specific_request}
+
+Sincerely,
+${request.team_name}
+[STATUS: DRAFT ONLY - NOT SENT]`;
     }
 
     if (qualified.length < request.limit) {

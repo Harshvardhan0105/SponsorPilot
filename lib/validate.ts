@@ -28,13 +28,15 @@ export function partitionTeamFacts(facts: TeamFact[]): {
 }
 
 /**
- * Check if a text attempts to assert an unapproved win, championship, rank, or award claim.
+ * Check if a text attempts to assert an unapproved win, championship, rank, award, or audience reach claim.
  */
 export function containsUnapprovedAchievement(
   text: string,
   approvedFacts: TeamFact[]
 ): { hasViolation: boolean; detectedPhrase?: string } {
-  const winKeywords = [
+  if (!text) return { hasViolation: false };
+
+  const unapprovedPatterns = [
     /\bwon\b/i,
     /\bwinner\b/i,
     /\bchampionship\b/i,
@@ -45,12 +47,15 @@ export function containsUnapprovedAchievement(
     /\bgold medal\b/i,
     /\branked #?1\b/i,
     /\bworld champion\b/i,
+    /\b(\d+[kK]?|\d+,\d+)\s*(attendees|participants|impressions|views|followers|reach)\b/i,
+    /\bsponsors?\s+include\b/i,
+    /\bpartnered with\b/i,
   ];
 
-  for (const regex of winKeywords) {
+  for (const regex of unapprovedPatterns) {
     const match = text.match(regex);
     if (match) {
-      // Check if this achievement is explicitly in the approved facts
+      // Check if this specific phrase is explicitly corroborated in the approved facts
       const isApproved = approvedFacts.some((af) =>
         af.text.toLowerCase().includes(match[0].toLowerCase())
       );
@@ -106,7 +111,8 @@ export function deduplicateCompanies<T extends { id?: string; domain?: string; n
 
 /**
  * Strict contact validator: never invent emails or contact details.
- * If email is not directly verified by the data source, set to null.
+ * Do not call contacts verified merely because an email address exists.
+ * Unless current active employment is independently certified, keep verified: false.
  */
 export function sanitizeContact(contact: ContactPerson | null | undefined): ContactPerson | null {
   if (!contact || !contact.name || contact.name.trim() === "") {
@@ -131,7 +137,7 @@ export function sanitizeContact(contact: ContactPerson | null | undefined): Cont
     title: contact.title.trim() || "Partnership Contact",
     email: validEmail,
     linkedin_url: contact.linkedin_url || null,
-    verified: Boolean(contact.verified && validEmail),
+    verified: false, // Strict safety: do not treat unverified database scraping as confirmed current employment
     role_family: contact.role_family || "Partnerships / Business Development",
   };
 }

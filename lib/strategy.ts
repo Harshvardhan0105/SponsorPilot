@@ -37,8 +37,8 @@ export const NEED_STRATEGIES: NeedStrategyMapping[] = [
     needKeyword: "avionics",
     matchedKeywords: ["avionics", "sensors", "flight control", "imu", "telemetry", "autopilot", "navigation"],
     recommendedAskType: "discount",
-    requiredEvidenceKeywords: ["avionics", "inertial", "imu", "ins", "flight control", "telemetry", "sensor"],
-    rejectionTriggers: ["consumer audio", "toy drone", "general retail", "screen protector", "bank"],
+    requiredEvidenceKeywords: ["avionics", "inertial navigation", "inertial sensor", "imu", "flight control", "telemetry", "mems sensor", "sensor"],
+    rejectionTriggers: ["consumer audio", "toy drone", "general retail", "screen protector", "bank", "insurance"],
     defaultSpecificRequest: (team, comp) =>
       `Evaluation units or academic pricing on inertial/avionics sensor components for integration into ${team}'s system.`,
     defaultReason: (team, comp) =>
@@ -131,13 +131,38 @@ export function qualifyCompanyMatch(
   const uncertainties: string[] = [];
   const evidenceSnippets: { claim: string; source_url: string }[] = [];
 
-  // Check rejection triggers first across all applicable strategies
+  // Check explicit negations (e.g., "PCB design only; we do not fabricate boards")
+  const hasNegationOfManufacturing =
+    /\b(do not|not|no|neither)\s+(fabricate|manufacture|assemble|build|produce)\b/i.test(textCorpus) ||
+    /\b(design only|consulting only|advisory only)\b/i.test(textCorpus);
+
+  const needsManufacturing = strategies.some(
+    (s) => s.needKeyword === "pcb" || s.needKeyword === "battery"
+  );
+
+  if (hasNegationOfManufacturing && needsManufacturing) {
+    return {
+      isQualified: false,
+      rejectionReason: `Capability mismatch: Company explicitly disclaims in-house fabrication/manufacturing capability (e.g. design only or consulting).`,
+      matchedNeeds: [],
+      ask: {
+        type: strategies[0].recommendedAskType,
+        specific_request: "",
+        reason: "",
+      },
+      evidenceSnippets: [],
+      uncertainties: ["Fabrication disclaimed"],
+    };
+  }
+
+  // Check rejection triggers using token-aware whole-word matching
   for (const strat of strategies) {
     for (const trigger of strat.rejectionTriggers) {
-      if (textCorpus.includes(trigger.toLowerCase())) {
+      const triggerRegex = new RegExp(`\\b${trigger}\\b`, "i");
+      if (triggerRegex.test(textCorpus)) {
         return {
           isQualified: false,
-          rejectionReason: `Capability mismatch: Company appears to operate as a ${trigger} without verified in-house manufacturing, prototyping, or specialized engineering services needed for ${strat.needKeyword}.`,
+          rejectionReason: `Capability mismatch: Company profile matches '${trigger}', indicating lack of specialized capability for ${strat.needKeyword}.`,
           matchedNeeds: [],
           ask: {
             type: strat.recommendedAskType,
@@ -151,21 +176,28 @@ export function qualifyCompanyMatch(
     }
   }
 
-  // Check positive evidence matches strictly against required specific keywords
+  // Check positive evidence matches strictly against required whole-word keywords
   const matchedNeeds: string[] = [];
   let primaryStrategy = strategies[0];
 
   for (const strat of strategies) {
-    const matchingSnippet = strat.requiredEvidenceKeywords.find((kw) =>
-      textCorpus.includes(kw.toLowerCase())
-    );
-    if (matchingSnippet) {
-      matchedNeeds.push(strat.needKeyword);
-      primaryStrategy = strat;
-      evidenceSnippets.push({
-        claim: `Verified evidence of ${matchingSnippet} in corporate profile.`,
-        source_url: company.domain ? `https://${company.domain.replace(/^https?:\/\//, "")}` : "Corporate Registry / Profile",
-      });
+    for (const kw of strat.requiredEvidenceKeywords) {
+      const kwRegex = new RegExp(`\\b${kw}\\b`, "i");
+      if (kwRegex.test(textCorpus)) {
+        matchedNeeds.push(strat.needKeyword);
+        primaryStrategy = strat;
+
+        // Ensure valid domain link; never construct URLs from missing domains or placeholders
+        const domainClean = company.domain && /^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}/.test(company.domain)
+          ? `https://${company.domain.replace(/^https?:\/\//, "").replace(/\/$/, "")}`
+          : "Public Corporate Profile";
+
+        evidenceSnippets.push({
+          claim: `Verified capability for '${kw}' documented in public corporate profile.`,
+          source_url: domainClean,
+        });
+        break;
+      }
     }
   }
 

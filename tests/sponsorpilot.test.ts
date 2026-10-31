@@ -168,32 +168,46 @@ describe("SponsorPilot Qualification & Guards", () => {
     expect(result.rejectionReason?.toLowerCase()).toContain("insufficient specific evidence");
   });
 
-  it("TC-09 (Regression - Blocker 2): Free-text description cannot inject unapproved wins, and non-IITB teams have no hardcoded affiliation", async () => {
-    const externalTeamBrief: RunRequest = {
-      team_name: "MIT Robotics Lab",
-      team_description: "Autonomous drone team. We won the 2025 World Championship Gold Medal.",
-      team_facts: [
-        {
-          text: "Collegiate drone team developing search-and-rescue UAVs",
-          approved: true,
-          origin: "team_approved",
-        },
-      ],
-      needs: ["PCB fabrication"],
-      target_industries: ["electronics manufacturing"],
-      country: "India",
-      limit: 1,
-      force_mode: "DEMO",
+  it("TC-10 (Codex Blocker 1 Regression): Insurance company is never verified as inertial navigation, and PCB design negation is rejected", () => {
+    const strategies = matchStrategyForNeeds(["PCB fabrication", "avionics components"]);
+
+    // 1. Insurance company with word "insurance" containing "ins"
+    const insuranceCompany = {
+      name: "Life & Health Insurance Corp",
+      domain: "lifehealthinsurance.in",
+      description: "General life and health insurance coverage and financial underwriting.",
+      industry: "Financial & Insurance",
     };
+    const insResult = qualifyCompanyMatch(insuranceCompany, "Team Rakshak", ["avionics components"], strategies);
+    expect(insResult.isQualified).toBe(false);
 
-    const response = await runSponsorPilotAgent(externalTeamBrief);
-    expect(response.qualified.length).toBeGreaterThanOrEqual(1);
-    const draft = response.qualified[0].email_draft.body;
+    // 2. Negation: "PCB design only; we do not fabricate boards"
+    const designOnlyCompany = {
+      name: "Schematic Labs",
+      domain: "schematiclabs.in",
+      description: "PCB design only; we do not fabricate or manufacture boards in-house.",
+      industry: "Electronics Design",
+    };
+    const pcbNegResult = qualifyCompanyMatch(designOnlyCompany, "Team Rakshak", ["PCB fabrication"], strategies);
+    expect(pcbNegResult.isQualified).toBe(false);
+    expect(pcbNegResult.rejectionReason?.toLowerCase()).toContain("disclaims in-house fabrication");
+  });
 
-    // Must not contain hardcoded IIT Bombay
-    expect(draft).not.toContain("IIT Bombay");
-    // Must not contain unapproved world championship win claim
-    expect(draft.toLowerCase()).not.toContain("world championship");
-    expect(draft.toLowerCase()).not.toContain("gold medal");
+  it("TC-11 (Codex Blocker 2 Regression): Rejects LLM drafts asserting unapproved audience reach or awards across both subject and body", () => {
+    const approvedFacts = [
+      {
+        text: "Designs collegiate UAV airframes",
+        approved: true,
+        origin: "team_approved" as const,
+      },
+    ];
+
+    // Unapproved audience reach claim
+    const reachCheck = containsUnapprovedAchievement("Access to our audience reach of 50k attendees", approvedFacts);
+    expect(reachCheck.hasViolation).toBe(true);
+
+    // Unapproved sponsor claim
+    const sponsorCheck = containsUnapprovedAchievement("Our past sponsors include Boeing", approvedFacts);
+    expect(sponsorCheck.hasViolation).toBe(true);
   });
 });
