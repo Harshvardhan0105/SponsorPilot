@@ -63,6 +63,8 @@ export async function runSponsorPilotAgent(request: RunRequest): Promise<RunResp
   const isLiveCrustdata = Boolean(crustdataKey) && request.force_mode !== "DEMO";
   const hasLlm = Boolean(geminiKey);
 
+  let usedLlmReasoning = false;
+
   // STEP 1: INTAKE & TEAM FACTS GUARD
   trace.push({
     action: "INTAKE",
@@ -84,6 +86,16 @@ export async function runSponsorPilotAgent(request: RunRequest): Promise<RunResp
     }
   }
 
+  // Also verify team_description: free-text descriptions are unverified input, not approved achievements
+  const descCheck = containsUnapprovedAchievement(request.team_description, approvedFacts);
+  if (descCheck.hasViolation) {
+    trace.push({
+      action: "TEAM_FACTS_GUARD",
+      outcome: `Blocked unverified win/award claim inside team_description. Excluded from outbound pitch drafts.`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   // STEP 2: PLAN SEARCH STRATEGY
   const strategies = matchStrategyForNeeds(request.needs);
   let searchQuery = request.needs.slice(0, 2).join(" ");
@@ -92,7 +104,8 @@ export async function runSponsorPilotAgent(request: RunRequest): Promise<RunResp
   // Use LLM for query formulation if available
   if (hasLlm) {
     const queryPlanningPrompt = `You are a B2B sponsorship search query planner.
-Team: ${request.team_name} (${request.team_description})
+Team: ${request.team_name}
+Approved Team Facts: ${approvedFacts.map((f) => f.text).join("; ") || "Student team"}
 Needs: ${request.needs.join(", ")}
 Industries: ${request.target_industries.join(", ")}
 Target Country: ${request.country}
@@ -102,9 +115,16 @@ Return ONLY a concise 2-4 word Crustdata keyword search string targeting industr
     const llmQuery = await callGeminiIfAvailable(queryPlanningPrompt);
     if (llmQuery && llmQuery.trim().length > 0) {
       searchQuery = llmQuery.trim().replace(/["']/g, "");
+      usedLlmReasoning = true;
       trace.push({
         action: "PLAN (LLM)",
         outcome: `Autonomous planner synthesized targeted search query: "${searchQuery}"`,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      trace.push({
+        action: "PLAN (Heuristic)",
+        outcome: `Query formulated deterministically: "${searchQuery}" in ${searchIndustry}. (Gemini call unavailable; operating in heuristic mode).`,
         timestamp: new Date().toISOString(),
       });
     }
@@ -374,18 +394,17 @@ Return ONLY a concise 2-4 word Crustdata keyword search string targeting industr
 
     // If Gemini LLM is present, generate grounded draft
     if (hasLlm) {
-      const draftingPrompt = `Write a professional, concise sponsorship pitch email (under 160 words).
+      const draftingPrompt = `Write a professional, concise sponsorship pitch email (under 140 words).
 Recipient: ${contactPerson ? `${contactPerson.name} (${contactPerson.title})` : `Partnership Coordinator at ${company.name}`}
 Sender Team: ${request.team_name}
-Team Description: ${request.team_description}
-Approved Team Facts (ONLY use these team claims): ${approvedFacts.map((f) => f.text).join("; ") || "Collegiate engineering team"}
+Approved Team Facts (ONLY use these verified facts, DO NOT use unverified claims): ${approvedFacts.map((f) => f.text).join("; ") || "Collegiate student team"}
 Company Verified Capabilities: ${company.description} (${company.industry})
 Specific Sponsorship Ask: ${qual.ask.specific_request}
 Ask Justification: ${qual.ask.reason}
 
 CRITICAL RULES:
-1. Do NOT invent achievements, competition rankings, or past sponsor endorsements.
-2. Clearly state the specific ask and what the student team credibly offers in return (e.g. logo, engineering case study, recruitment access).
+1. Do NOT invent achievements, rankings, awards, or past sponsors.
+2. Do NOT promise guaranteed publicity, marketing reach, or case studies without approved backing.
 3. Keep tone respectful, direct, and collegiate.
 
 Format response as:
@@ -402,33 +421,39 @@ BODY:
         const parts = llmDraft.split("BODY:");
         emailSubject = parts[0].replace(/SUBJECT:/i, "").trim();
         emailBody = parts[1].trim();
+        usedLlmReasoning = true;
       }
     }
 
     // Deterministic fallback draft if LLM draft was not generated
     if (!emailBody) {
       const recipientGreeting = contactPerson ? `Hi ${contactPerson.name.split(" ")[0]},` : `Hello ${company.name} Team,`;
-      const approvedFactSnippet = approvedFacts.length > 0 ? approvedFacts[0].text : request.team_description;
+      const approvedFactSnippet = approvedFacts.length > 0
+        ? `We are ${request.team_name}. Confirmed background: ${approvedFacts.map((f) => f.text).join(". ")}.`
+        : `We are reaching out from ${request.team_name}.`;
 
-      emailSubject = `Student Sponsorship Request: ${qual.ask.type.toUpperCase()} Partnership with ${request.team_name}`;
+      emailSubject = `Student Partnership Inquiry: ${qual.ask.type.toUpperCase()} Collaboration with ${request.team_name}`;
       emailBody = `${recipientGreeting}
 
-I am reaching out on behalf of ${request.team_name} from IIT Bombay. ${approvedFactSnippet}.
+${approvedFactSnippet}
 
-We have been closely following ${company.name}'s work in ${company.industry || "engineering and manufacturing"}. In particular, your capability in ${sanitizeUntrustedText(company.description).slice(0, 80)} directly aligns with our current development milestones.
-
-We would like to request:
+We noted your verified operations in ${company.industry || "engineering"}. Based on your technical capabilities, we would welcome the opportunity to discuss:
 • Specific Ask: ${qual.ask.specific_request}
-• Why ${company.name}: ${qual.ask.reason}
+• Alignment Context: ${qual.ask.reason}
 
-In exchange, our team offers prominent visibility on our hardware, documentation, and digital channels, alongside technical review case studies showcasing your support to our engineering student community.
-
-${contactPerson ? "Would you be open to a brief 10-minute introductory call next week?" : "Could you kindly direct this inquiry to your University Relations or Corporate Partnerships coordinator?"}
+If there is potential alignment for student partnership, please let us know the appropriate contact.
 
 Sincerely,
-Sponsorship & Partnerships Team
-${request.team_name}, IIT Bombay
+${request.team_name}
 [STATUS: DRAFT ONLY - NOT SENT]`;
+    }
+
+    // FINAL OUTPUT VALIDATION GUARD:
+    // Strip any unapproved competition win/award claims from draft
+    const draftWinCheck = containsUnapprovedAchievement(emailBody, approvedFacts);
+    if (draftWinCheck.hasViolation && draftWinCheck.detectedPhrase) {
+      const regex = new RegExp(`\\b${draftWinCheck.detectedPhrase}\\b`, "gi");
+      emailBody = emailBody.replace(regex, "[unverified claim excluded]");
     }
 
     if (qualified.length < request.limit) {
@@ -452,15 +477,6 @@ ${request.team_name}, IIT Bombay
         uncertainties,
       });
     }
-  }
-
-  // Check if fewer than desired qualified leads and bounded retry available
-  if (qualified.length < 2 && isLiveCrustdata) {
-    trace.push({
-      action: "RETRY_QUERY",
-      outcome: `Initial query yielded only ${qualified.length} qualified lead(s). Initiating one bounded broader query retry for '${searchIndustry}'.`,
-      timestamp: new Date().toISOString(),
-    });
   }
 
   trace.push({
@@ -491,7 +507,7 @@ ${request.team_name}, IIT Bombay
       qualified_count: qualified.length,
       rejected_count: rejected.length,
       wall_clock_ms: wallClockMs,
-      has_llm_reasoning: hasLlm,
+      has_llm_reasoning: usedLlmReasoning,
     },
   };
 }

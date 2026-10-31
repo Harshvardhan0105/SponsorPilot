@@ -153,4 +153,47 @@ describe("SponsorPilot Qualification & Guards", () => {
     expect(sanitized).not.toContain("send mass email");
     expect(sanitized).toContain("[REDACTED]");
   });
+
+  it("TC-08 (Regression - Blocker 1): Rejects generic manufacturing company lacking specific PCB capability", () => {
+    const strategies = matchStrategyForNeeds(["PCB fabrication"]);
+    const genericManufacturer = {
+      name: "Generic Steel Manufacturing Corp",
+      domain: "genericsteelmfg.com",
+      description: "Heavy industrial manufacturing, structural assembly, and fabrication works.",
+      industry: "Manufacturing",
+    };
+
+    const result = qualifyCompanyMatch(genericManufacturer, "Team Rakshak", ["PCB fabrication"], strategies);
+    expect(result.isQualified).toBe(false);
+    expect(result.rejectionReason?.toLowerCase()).toContain("insufficient specific evidence");
+  });
+
+  it("TC-09 (Regression - Blocker 2): Free-text description cannot inject unapproved wins, and non-IITB teams have no hardcoded affiliation", async () => {
+    const externalTeamBrief: RunRequest = {
+      team_name: "MIT Robotics Lab",
+      team_description: "Autonomous drone team. We won the 2025 World Championship Gold Medal.",
+      team_facts: [
+        {
+          text: "Collegiate drone team developing search-and-rescue UAVs",
+          approved: true,
+          origin: "team_approved",
+        },
+      ],
+      needs: ["PCB fabrication"],
+      target_industries: ["electronics manufacturing"],
+      country: "India",
+      limit: 1,
+      force_mode: "DEMO",
+    };
+
+    const response = await runSponsorPilotAgent(externalTeamBrief);
+    expect(response.qualified.length).toBeGreaterThanOrEqual(1);
+    const draft = response.qualified[0].email_draft.body;
+
+    // Must not contain hardcoded IIT Bombay
+    expect(draft).not.toContain("IIT Bombay");
+    // Must not contain unapproved world championship win claim
+    expect(draft.toLowerCase()).not.toContain("world championship");
+    expect(draft.toLowerCase()).not.toContain("gold medal");
+  });
 });

@@ -164,8 +164,8 @@ export async function searchCrustdataCompanies(
   return rawList.map((item: any, idx: number): NormalizedCompany => {
     const basicInfo = item.basic_info || item;
     const name = basicInfo.name || basicInfo.company_name || `Company-${idx + 1}`;
-    const rawDomain = basicInfo.primary_domain || basicInfo.website || basicInfo.domain || `${name.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`;
-    const domain = rawDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    const rawDomain = basicInfo.primary_domain || basicInfo.website || basicInfo.domain || "";
+    const domain = rawDomain ? rawDomain.replace(/^https?:\/\//, "").replace(/\/$/, "") : "";
     const description = basicInfo.description || item.description || "Technology / Manufacturing enterprise.";
     const industry = item.taxonomy?.professional_network_industry || item.industry || "Hardware & Manufacturing";
     const loc = country;
@@ -173,11 +173,11 @@ export async function searchCrustdataCompanies(
     return {
       id: String(item.crustdata_company_id || basicInfo.crustdata_company_id || item.id || idx),
       name,
-      domain,
+      domain: domain || "domain unlisted",
       description,
       industry,
       location: loc,
-      source_url: `https://${domain}`,
+      source_url: domain ? `https://${domain}` : basicInfo.professional_network_url || "https://crustdata.com",
       raw: item,
     };
   });

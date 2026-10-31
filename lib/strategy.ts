@@ -15,56 +15,56 @@ export const NEED_STRATEGIES: NeedStrategyMapping[] = [
     needKeyword: "battery",
     matchedKeywords: ["battery", "battery pack", "cells", "bms", "energy storage", "lithium", "solar"],
     recommendedAskType: "in_kind",
-    requiredEvidenceKeywords: ["battery", "cell", "energy storage", "pack assembly", "bms", "lithium", "power"],
+    requiredEvidenceKeywords: ["battery", "lithium", "bms", "energy storage", "cell pack"],
     rejectionTriggers: ["retail", "consumer goods", "alkaline", "phone charger", "consumer power bank"],
     defaultSpecificRequest: (team, comp) =>
-      `High-discharge lithium cell allocation and battery management system (BMS) testing support for the vehicle powertrain.`,
+      `Lithium cell allocation or battery management system (BMS) testing support for ${team}'s vehicle powertrain.`,
     defaultReason: (team, comp) =>
-      `${comp} specializes in high-density battery cell fabrication and pack safety testing, vital for vehicle endurance.`,
+      `${comp} shows verified business operations in battery/energy storage systems corresponding to ${team}'s power requirements.`,
   },
   {
     needKeyword: "pcb",
     matchedKeywords: ["pcb", "pcb fabrication", "circuit board", "smt", "pcba", "board prototyping"],
     recommendedAskType: "in_kind",
-    requiredEvidenceKeywords: ["fabrication", "manufacturing", "pcb", "assembly", "prototyping", "board", "smt", "ems"],
-    rejectionTriggers: ["retail", "consumer e-commerce", "phone repair", "gadget store", "retailer", "accessory"],
+    requiredEvidenceKeywords: ["pcb", "printed circuit", "pcba", "bare-board", "rigid-flex"],
+    rejectionTriggers: ["retail", "consumer e-commerce", "phone repair", "gadget store", "retailer", "accessory", "bank", "financial"],
     defaultSpecificRequest: (team, comp) =>
-      `Prototyping sponsorship for 5-10 small-batch multilayer PCBs and assembly assistance for ${team}'s airborne avionics modules.`,
+      `Prototyping support for small-batch custom PCBs for ${team}'s hardware modules.`,
     defaultReason: (team, comp) =>
-      `${comp} possesses specialized PCB manufacturing and surface-mount assembly infrastructure, directly meeting ${team}'s hardware turnaround need.`,
+      `${comp} lists verified PCB/PCBA capability, directly aligning with ${team}'s prototyping need.`,
   },
   {
     needKeyword: "avionics",
     matchedKeywords: ["avionics", "sensors", "flight control", "imu", "telemetry", "autopilot", "navigation"],
     recommendedAskType: "discount",
-    requiredEvidenceKeywords: ["sensor", "avionics", "aerospace", "navigation", "mems", "inertial", "embedded"],
-    rejectionTriggers: ["consumer audio", "toy drone", "general retail", "screen protector"],
+    requiredEvidenceKeywords: ["avionics", "inertial", "imu", "ins", "flight control", "telemetry", "sensor"],
+    rejectionTriggers: ["consumer audio", "toy drone", "general retail", "screen protector", "bank"],
     defaultSpecificRequest: (team, comp) =>
-      `Evaluation sensor units or discounted access to high-precision IMU/avionics components for integration into ${team}'s flight stack.`,
+      `Evaluation units or academic pricing on inertial/avionics sensor components for integration into ${team}'s system.`,
     defaultReason: (team, comp) =>
-      `${comp} supplies industrial/aerospace grade sensor solutions, eliminating single-point sensor drift in competitive flight maneuvers.`,
+      `${comp} provides verified avionics/inertial navigation sensor solutions required for autonomous navigation.`,
   },
   {
     needKeyword: "software",
     matchedKeywords: ["software", "cad", "eda", "simulation", "cfd", "design tools", "licensing"],
     recommendedAskType: "license",
-    requiredEvidenceKeywords: ["cad", "cae", "eda", "simulation", "software", "modeling", "finite element", "cfd"],
-    rejectionTriggers: ["web design agency", "seo services", "accounting software"],
+    requiredEvidenceKeywords: ["cad", "cae", "eda", "simulation", "cfd", "modeling software"],
+    rejectionTriggers: ["web design agency", "seo services", "accounting software", "bank"],
     defaultSpecificRequest: (team, comp) =>
-      `Educational student team licenses (5-10 seats) and a technical mentoring session for engineering design optimization.`,
+      `Educational student team licenses (5-10 seats) for engineering design and simulation.`,
     defaultReason: (team, comp) =>
-      `${comp} develops industry-standard simulation and CAD software; using it enables rapid aerodynamic validation and trains future engineering talent on their toolchain.`,
+      `${comp} produces engineering design/simulation tools required for design validation.`,
   },
   {
     needKeyword: "funding",
     matchedKeywords: ["funding", "cash", "travel", "competition", "grant", "logistics"],
     recommendedAskType: "cash",
-    requiredEvidenceKeywords: ["corporate social responsibility", "csr", "stem", "university relations", "foundation", "grant"],
+    requiredEvidenceKeywords: ["corporate social responsibility", "csr", "stem grant", "university relations"],
     rejectionTriggers: ["loan provider", "debt collection", "microfinance"],
     defaultSpecificRequest: (team, comp) =>
-      `Tiered financial partnership sponsorship (travel and freight grant) to represent the institute at national/international competitions.`,
+      `Tiered financial partnership sponsorship to support student engineering competition participation.`,
     defaultReason: (team, comp) =>
-      `${comp} has an active STEM outreach and university innovation program aligning with student-led competitive engineering.`,
+      `${comp} maintains STEM outreach/CSR initiatives aligned with collegiate engineering.`,
   },
 ];
 
@@ -151,29 +151,29 @@ export function qualifyCompanyMatch(
     }
   }
 
-  // Check positive evidence matches
+  // Check positive evidence matches strictly against required specific keywords
   const matchedNeeds: string[] = [];
   let primaryStrategy = strategies[0];
 
   for (const strat of strategies) {
-    const hasEvidence = strat.requiredEvidenceKeywords.some((kw) =>
+    const matchingSnippet = strat.requiredEvidenceKeywords.find((kw) =>
       textCorpus.includes(kw.toLowerCase())
     );
-    if (hasEvidence) {
+    if (matchingSnippet) {
       matchedNeeds.push(strat.needKeyword);
       primaryStrategy = strat;
       evidenceSnippets.push({
-        claim: `Company verified in ${strat.needKeyword} domain (${company.industry || "Hardware / Technology"}).`,
-        source_url: `https://${company.domain.replace(/^https?:\/\//, "")}`,
+        claim: `Verified evidence of ${matchingSnippet} in corporate profile.`,
+        source_url: company.domain ? `https://${company.domain.replace(/^https?:\/\//, "")}` : "Corporate Registry / Profile",
       });
     }
   }
 
-  // If no positive evidence matched, reject as unrelated
+  // If no specific capability keyword matched, reject conservatively
   if (matchedNeeds.length === 0) {
     return {
       isQualified: false,
-      rejectionReason: `No verified evidence of manufacturing or specialized capability corresponding to team needs (${needs.join(", ")}).`,
+      rejectionReason: `Insufficient specific evidence of ${strategies.map((s) => s.needKeyword).join("/")} capabilities. Generic manufacturing or technology terms are rejected.`,
       matchedNeeds: [],
       ask: {
         type: primaryStrategy.recommendedAskType,
@@ -181,7 +181,7 @@ export function qualifyCompanyMatch(
         reason: "",
       },
       evidenceSnippets: [],
-      uncertainties: ["Unverified technical alignment"],
+      uncertainties: ["Specific capability unverified"],
     };
   }
 
